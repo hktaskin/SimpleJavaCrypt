@@ -6,6 +6,7 @@ package hkt.javacrypt;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
@@ -95,6 +96,46 @@ public class HKTJavaCrypt {
         cipher.init(Cipher.DECRYPT_MODE, _key, new GCMParameterSpec(128, recovered_iv));
         byte[] plaintext = cipher.doFinal(toByteArray(cipherdata[2]));
         return new String(plaintext);
+    }
+
+    private void _processFile(boolean encrypting, String inFile, String outFile) throws Exception {
+
+        try (FileInputStream in = new FileInputStream(inFile);
+                FileOutputStream out = new FileOutputStream(outFile)) {
+            byte[] iv = new byte[16];
+            if (encrypting) {
+                SEC_RANDOM.nextBytes(iv);
+                // Write IV first without encryption
+                out.write(iv);
+            } else {
+                // We are decrypting, read IV from the file.
+                in.read(iv);
+            }
+            // Init the Cipher
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(encrypting ? Cipher.ENCRYPT_MODE : Cipher.DECRYPT_MODE, _key, new GCMParameterSpec(128, iv));
+            // Process the file
+            byte[] inbuf = new byte[1024];
+            int len;
+            while ((len = in.read(inbuf)) != -1) {
+                byte[] outbuf = cipher.update(inbuf, 0, len);
+                if (outbuf != null) {
+                    out.write(outbuf);
+                }
+            }
+            byte[] outbuf = cipher.doFinal();
+            if (outbuf != null) {
+                out.write(outbuf);
+            }
+        }
+    }
+
+    public void encryptFile(String inFile, String outFile) throws Exception {
+        _processFile(true, inFile, outFile);
+    }
+
+    public void decryptFile(String inFile, String outFile) throws Exception {
+        _processFile(false, inFile, outFile);
     }
 
     public String showKey() {
